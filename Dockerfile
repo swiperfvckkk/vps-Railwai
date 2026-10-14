@@ -1,23 +1,40 @@
-FROM kalilinux/kali-rolling 
 
-RUN apt-get update -y > /dev/null 2>&1 && apt-get upgrade -y > /dev/null 2>&1 && apt-get install locales -y \ 
-     && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 \ 
-     && apt-get install ssh wget unzip openssh-server -y > /dev/null 2>&1 
+FROM kalilinux/kali-rolling
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends \
+       locales openssh-server wget unzip ca-certificates \
+    && localedef -i en_US -c -f UTF-8 en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
 ARG ngrokid
 ARG Password
-ENV Password=${Password}
-ENV ngrokid=${ngrokid}
-RUN wget -O ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip > /dev/null 2>&1 \ 
-     && unzip ngrok.zip 
-RUN echo "./ngrok config add-authtoken ${ngrokid} &&" >>/kali.sh \ 
-     && echo "./ngrok tcp --region=jp 22 &>/dev/null &" >>/kali.sh \ 
-     && echo 'mkdir -p /run/sshd' >>/kali.sh \ 
-     && echo '/usr/sbin/sshd -D' >>/kali.sh \ 
-     && echo 'echo "By Radhin Development"' >> /kali.sh 
-RUN echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config \ 
-     && echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config \ 
-     && echo root:${Password}|chpasswd 
-RUN service ssh start 
-RUN chmod 755 /kali.sh 
-EXPOSE 22 80 8888 8080 443 5130 5131 5132 5133 5134 5135 3306 
-CMD  /kali.sh
+
+RUN test -n "$ngrokid" \
+    && test -n "$Password" \
+    && wget -q -O /tmp/ngrok.zip \
+       https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip \
+    && unzip /tmp/ngrok.zip -d /usr/local/bin \
+    && rm /tmp/ngrok.zip \
+    && chmod 755 /usr/local/bin/ngrok
+
+RUN mkdir -p /run/sshd \
+    && echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config \
+    && echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config \
+    && echo "root:${Password}" | chpasswd \
+    && printf '%s\n' \
+       '#!/bin/bash' \
+       'set -e' \
+       'ngrok config add-authtoken "$NGROK_AUTHTOKEN"' \
+       'ngrok tcp --region=jp 22 &' \
+       'exec /usr/sbin/sshd -D -e' \
+       > /usr/local/bin/start-vps \
+    && chmod 755 /usr/local/bin/start-vps
+
+ENV NGROK_AUTHTOKEN=""
+
+EXPOSE 22
+
+CMD ["/usr/local/bin/start-vps"]
