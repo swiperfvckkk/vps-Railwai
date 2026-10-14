@@ -3,36 +3,30 @@ FROM kalilinux/kali-rolling
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update -y \
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       locales openssh-server wget unzip ca-certificates \
+       locales openssh-server wget ca-certificates \
     && localedef -i en_US -c -f UTF-8 en_US.UTF-8 \
+    && wget -q \
+       https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+       -O /usr/local/bin/cloudflared \
+    && chmod +x /usr/local/bin/cloudflared \
     && rm -rf /var/lib/apt/lists/*
-
-
-ARG ngrokid
-ARG Password
-
-RUN wget -q -O /tmp/ngrok.zip \
-    https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip \
-    && unzip /tmp/ngrok.zip -d /usr/local/bin \
-    && rm /tmp/ngrok.zip \
-    && chmod 755 /usr/local/bin/ngrok
 
 RUN mkdir -p /run/sshd \
     && echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config \
-    && echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config \
-    && echo "root:${Password}" | chpasswd \
-    && printf '%s\n' \
-       '#!/bin/bash' \
-       'set -e' \
-       'ngrok config add-authtoken "$NGROK_AUTHTOKEN"' \
-       'ngrok tcp --region=jp 22 &' \
-       'exec /usr/sbin/sshd -D -e' \
-       > /usr/local/bin/start-vps \
-    && chmod 755 /usr/local/bin/start-vps
+    && echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
 
-ENV NGROK_AUTHTOKEN=""
+RUN printf '%s\n' \
+    '#!/bin/bash' \
+    'set -e' \
+    ': "${ROOT_PASSWORD:?Set ROOT_PASSWORD in Railway Variables}"' \
+    ': "${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in Railway Variables}"' \
+    'echo "root:${ROOT_PASSWORD}" | chpasswd' \
+    '/usr/sbin/sshd' \
+    'exec cloudflared tunnel --no-autoupdate run --token "$CLOUDFLARE_TUNNEL_TOKEN"' \
+    > /usr/local/bin/start-vps \
+    && chmod +x /usr/local/bin/start-vps
 
 EXPOSE 22
 
