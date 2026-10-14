@@ -9,13 +9,12 @@ RUN apt-get update -y \
     && localedef -i en_US -c -f UTF-8 en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
+
 ARG ngrokid
 ARG Password
 
-RUN test -n "$ngrokid" \
-    && test -n "$Password" \
-    && wget -q -O /tmp/ngrok.zip \
-       https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip \
+RUN wget -q -O /tmp/ngrok.zip \
+    https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip \
     && unzip /tmp/ngrok.zip -d /usr/local/bin \
     && rm /tmp/ngrok.zip \
     && chmod 755 /usr/local/bin/ngrok
